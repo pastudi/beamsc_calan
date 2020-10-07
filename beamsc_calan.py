@@ -280,8 +280,8 @@ def main():
     scan.rf_power=3.0 #dBm
     scan.lo_power=11.37 #dBm
     
-    name=raw_input('Enter antenna name (no spaces or special characters): ') or 'test'
-    comment=raw_input('Enter comments: ')
+    scan.name=raw_input('Enter antenna name (no spaces or special characters): ') or 'test'
+    scan.comment=raw_input('Enter comments: ')
     
     scan.savetxt(filepath)
         
