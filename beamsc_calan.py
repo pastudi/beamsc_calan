@@ -12,6 +12,12 @@ import time, re
 from math import ceil
 import pathlib2 as pathlib
 
+IP_VNA=         '192.168.1.30'
+IP_RF_SOURCE=   '192.168.1.36'
+IP_BEAM_XY=     '192.168.1.62'
+IP_BEAM_ANGLE=  '192.168.1.62'
+IP_LO_SOURCE=   '192.168.1.31'     # Agilent
+
 
 class Visa_inst:
     def __init__(self,ip,name='inst0'):
@@ -62,6 +68,9 @@ class BeamScanner:
         self.socket.sendall(self.type)
         self.get_resp()          # get de OK from server
         self.unit_conversion=float(self.get_unit_conversion())
+    
+    def close_all(self):
+        self.socket.sendall('close_all ')
     
     def get_unit_conversion(self):
         self.socket.sendall('get_unit_converter \n')
@@ -284,12 +293,6 @@ def main():
     scan.comment=raw_input('Enter comments: ')
     
     scan.savetxt(filepath)
-        
-    IP_VNA=         '192.168.1.30'
-    IP_RF_SOURCE=   '192.168.1.36'
-    IP_BEAM_XY=     '192.168.1.62'
-    IP_BEAM_ANGLE=  '192.168.1.62'
-    IP_LO_SOURCE=   '192.168.1.31'     # Agilent
     
     #roach=VVM()
     #roach=vv_calan.vv_calan(IP_VVM,'vv_casper.bof',1080)
@@ -328,7 +331,7 @@ def main():
     
     rf_source.write('FREQ:MULT 1')
     #rf_source.write('POW {:.2f} dBm'.format(rf_power))
-    rf_source.write('FREQ {:.9f} GHz; *OPC?'.format(scan.meas_freq/18))
+    rf_source.write('FREQ {:.9f} GHz; *OPC?'.format(scan.meas_freq/18.0))
     
     lo_source.query('FREQ:MULT 48; *OPC?')
     #lo_source.query('POW {:.2f} dBm; *OPC?'.format(lo_power))
@@ -387,7 +390,11 @@ def main():
             with open(filepath+scan.get_filepath(),'ab') as f:
                 np.savetxt(f,save_buffer)
             save_buffer=np.zeros((Npoints,4))
-            
+    
+    beam_xy.close_all()
+    vna.close()
+    lo_source.close()
+    rf_source.close()
 
 if __name__ == "__main__":
     print('Entered main')
