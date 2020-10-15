@@ -12,13 +12,6 @@ import time, re
 from math import ceil
 import pathlib2 as pathlib
 
-IP_VNA=         '192.168.1.30'
-IP_RF_SOURCE=   '192.168.1.36'
-IP_BEAM_XY=     '192.168.1.62'
-IP_BEAM_ANGLE=  '192.168.1.62'
-IP_LO_SOURCE=   '192.168.1.31'     # Agilent
-
-
 class Visa_inst:
     def __init__(self,ip,name='inst0'):
         self.addr="TCPIP0::"+ip+"::"+name+"::INSTR"
@@ -70,7 +63,7 @@ class BeamScanner:
         self.unit_conversion=float(self.get_unit_conversion())
     
     def close_all(self):
-        self.socket.sendall('close_all ')
+        self.socket.sendall('close_all \n')
     
     def get_unit_conversion(self):
         self.socket.sendall('get_unit_converter \n')
@@ -111,7 +104,17 @@ class BeamScanner:
             ans=self.query_moving()
         print("move_absolute(): ok")
         #print('ok')
-    
+        
+    def move_absolute_trigger(self,x,y):
+        self.socket.sendall('move_absolute_trigger {:.3f} {:.3f}\n'.format(x,y))
+        #ans=" ";
+        ans=self.query_moving()
+        while ans:
+            #ans=self.get_resp().strip()
+            time.sleep(0.1)
+            print("move_absolute_trigger(): moving")
+            ans=self.query_moving()
+        print("move_absolute_trigger(): ok")
 
 class VNA(Visa_inst):
     def __init__(self,ip,name='hpib7,16'):
@@ -146,9 +149,13 @@ class VNA(Visa_inst):
         self.write('CALCULATE1:PARAMETER:SELECT \'DATOS_im\' ')
         self.write('CALCULATE1:FORMAT IMAG')
         
-        self.write('SENSE1:SWEEP:POINTS {:.12f} '.format(n_sweep)) 
-        self.write('SENSE1:FREQ:START {:.12f} MHz '.format(start))
-        self.write('SENSE1:FREQ:STOP {:.12f} MHz '.format(stop))
+        self.query('SENS1:SWE:TYPE CW; *OPC?;')
+        
+         
+        #self.write('SENSE1:FREQ:START {:.12f} MHz '.format(start))
+        #self.write('SENSE1:FREQ:STOP {:.12f} MHz '.format(stop))
+        self.query('SENS1:FREQ:FIX {:.12f} MHz; *OPC?;'.format(start))
+        self.query('SENSE1:SWEEP:POINTS {:.12f}; *OPC?; '.format(n_sweep))
         self.write('SENSE1:BWID {:.12f} Hz '.format(bw))
         
         if n_avg!=0:
@@ -158,8 +165,14 @@ class VNA(Visa_inst):
         else:
             self.write('SENS:AVER OFF')
         
-        self.write('TRIG:SOUR MAN')
-        self.write('SENS:SWE:MODE SINGle')
+        self.write('TRIG:SOUR EXTernal')
+        #self.write('TRIG:TYPE EDGE')
+        #self.write('TRIG:SLOP NEGative')
+        #self.write('SENS:SWE:MODE CHANnel')
+        self.write('CONT:SIGN BNC1,TIENEGATIVE')
+        self.write('CONT:SIGN AUXT,INACTIVE')
+        
+        self.write('*CLS')
     
     def trigger(self):
         self.query(':INITIATE:IMMEDIATE; *OPC?')
@@ -187,9 +200,24 @@ class VNA(Visa_inst):
         self.write('FORMAT ASCII')
         
         self.write('CALCULATE1:DATA? FDATA')
-        DATA=self.read()
+        DATA=self.resource.read_ascii_values(separator=',')
         
-        return float(DATA)
+        return DATA 
+        
+    def ready(self,twait):
+        #return self.query('TRIG:STAT:READ? AUX1')
+        max_count=int(twait/0.1)
+        #print("{:d}".format(max_count))
+        count=0
+        while True:
+            ans=float(self.query('STAT:OPER:DEV?'))
+            #print(ans)
+            if ans == 16:
+                return True
+            if count > max_count:
+                return False
+            time.sleep(0.1)
+            count+=1
 
 class VVM:
     def __init__(self,ip='192.169.1.10',bofname='vv_casper.bof',valon_freq=1080):
@@ -219,12 +247,16 @@ class BeamMeasurement:
         self.ifbw=0.0
         self.sweep_points=0.0
         self.isAsig=True
+        self.avg_points=0
         #RF Source
         self.rf_power=0.0
         self.lo_power=0.0
         #Tipo de medicion
         self.meas_cut=False
         self.xcut=False
+        
+        self.meas_spd=0.0
+        self.move_spd=0.0
         
     def calc_step(self):    # En mm
         c=299792458
@@ -236,6 +268,9 @@ class BeamMeasurement:
         if n_points % 2 ==0:  # Always odd to include center point
             n_points+=1
         return int(n_points)
+        
+    def calc_plane(self):
+        return (self.calc_Msize()-1)*self.calc_step()
         
     def get_filepath(self):
         return self.name+'/'+self.meas_start.strftime("%Y%m%d_%H%M%S")
@@ -264,9 +299,21 @@ class BeamMeasurement:
             f.write('LO Power (dBm): {:.2f}\n'.format(self.lo_power))
         
 
+IP_VNA=         '192.168.1.30'
+IP_RF_SOURCE=   '192.168.1.36'
+IP_BEAM_XY=     '192.168.1.62'
+IP_BEAM_ANGLE=  '192.168.1.62'
+IP_LO_SOURCE=   '192.168.1.31'     # Agilent
+
+vna=VNA(IP_VNA)
+rf_source=Visa_inst(IP_RF_SOURCE)
+lo_source=Visa_inst(IP_LO_SOURCE)
+beam_xy=BeamScanner(IP_BEAM_XY,'move x,y')
+scan=BeamMeasurement()
+
 def main():
     
-    scan=BeamMeasurement()  # Measurement parameters
+      # Measurement parameters
     #meas_start=datetime.now()
     #file_tstamp=meas_start.strftime("%Y%m%d_%H%M%S")
     
@@ -284,10 +331,13 @@ def main():
     
     scan.if_freq=.050  # GHz
     scan.ifbw=40 # Hz
-    scan.sweep_points=1
+    scan.sweep_points=scan.calc_Msize()
     scan.isAsig=True
     scan.rf_power=3.0 #dBm
     scan.lo_power=11.37 #dBm
+    
+    scan.meas_spd=1   #mm/s
+    scan.move_spd=5     #mm/s
     
     scan.name=raw_input('Enter antenna name (no spaces or special characters): ') or 'test'
     scan.comment=raw_input('Enter comments: ')
@@ -296,10 +346,7 @@ def main():
     
     #roach=VVM()
     #roach=vv_calan.vv_calan(IP_VVM,'vv_casper.bof',1080)
-    vna=VNA(IP_VNA)
-    rf_source=Visa_inst(IP_RF_SOURCE)
-    lo_source=Visa_inst(IP_LO_SOURCE)
-    beam_xy=BeamScanner(IP_BEAM_XY,'move x,y')
+    
     
     #toLog=open(logpath+'beamscanner.log','a')
     #toLog.write('%s: Started\n'%(file_tstamp))
@@ -322,13 +369,10 @@ def main():
         beam_xy.connect()
     except:
         pass
-    beam_xy.set_speed(5,'x')
-    beam_xy.set_speed(5,'y')
+    beam_xy.set_speed(scan.move_spd,'x')
+    beam_xy.set_speed(scan.move_spd,'y')
     beam_xy.move_absolute(0,0)
-    
-    #vna.set_meas(if_freq*1000,if_freq*1000,ifbw,sweep_points,avg_points,isAsig)
-    vna.set_meas(scan)
-    
+        
     rf_source.write('FREQ:MULT 1')
     #rf_source.write('POW {:.2f} dBm'.format(rf_power))
     rf_source.write('FREQ {:.9f} GHz; *OPC?'.format(scan.meas_freq/18.0))
@@ -339,7 +383,28 @@ def main():
     
     Npoints=scan.calc_Msize()
     Nstep=Npoints-1
+        
+    tmeas_est=scan.calc_plane()/scan.meas_spd
     
+    
+    print("Estimated time [s]: {:.3f}".format(tmeas_est))
+    
+    vna.set_meas(scan)
+    
+    tmeas_act=float(vna.query('SENSE1:SWE:TIME?'))
+    
+    print("Actual time [s]: {:.3f}".format(tmeas_act))
+    
+    if tmeas_est>tmeas_act:  # Privilegiar medidas lentas
+        vna.write('SENSE1:SWE:TIME {:.3f}'.format(tmeas_est))
+        tmeas_act=float(vna.query('SENSE1:SWE:TIME?'))
+        print("New actual time [s]: {:.6f}".format(tmeas_act))
+    elif tmeas_est<tmeas_act:
+        scan.meas_spd=scan.calc_plane/tmeas_act
+        beam_xy.set_speed(scan.meas_spd)
+        print("New speed: {:.3f}".format(beam_xy.get_speed('x')))
+    
+    data_comp=np.zeros(Npoints,dtype=complex)
     data_re=np.zeros(Npoints**2)
     data_im=np.zeros(Npoints**2)
     data_mag=np.zeros(Npoints**2)
@@ -350,41 +415,51 @@ def main():
     x=np.arange(-Nstep/2,Nstep/2+1)*scan.calc_step()
     y=x
     
-    # Moving to first point
-    print("Moving to first point...", end=' ')
-    if scan.meas_cut:
-        if scan.xcut:
-            j=np.nonzero(y==0)
-            beam_xy.move_absolute(x[1],y[j])
-        else:
-            i=np.nonzero(x==0)
-            beam_xy.move_absolute(x[i],y[1])
-    else:
-        beam_xy.move_absolute(x[1],y[1])
-    
     # Measure loop
     beam_xy.flush()
-    for j in range(Npoints):
-        for i in range(Npoints):
+    for i in range(Npoints):  # start new row
         
-            nlist=j*Npoints+i
-            print ("Moving to {:.3f}, {:.3f}...".format(x[i],y[j]), end='\t')
-            beam_xy.move_absolute(x[i],y[j])
-            
-            vna.trigger()
-            
-            data_re[nlist]=vna.get_data('re')
-            data_im[nlist]=vna.get_data('im')
-            
-            data_comp=np.complex(data_re[nlist],data_im[nlist])
-            
-            data_mag[nlist]=abs(data_comp)
-            data_phase[nlist]=np.angle(data_comp)
-            
-            save_buffer[i,0]=x[i]
-            save_buffer[i,1]=y[j]
-            save_buffer[i,2]=data_re[nlist]
-            save_buffer[i,3]=data_im[nlist]
+        beam_xy.set_speed(scan.move_spd,'x')
+        
+        # Move to current row
+        
+        print ("Moving to start: {:.3f}, {:.3f}...".format(x[0],y[i]), end='\t')
+        beam_xy.move_absolute(x[0],y[i])
+        print("Stop moving")
+        beam_xy.set_speed(scan.meas_spd,'x')
+        
+        # Start moving + isntrument measurement
+        
+        print("Moving to end: {:.3f}, {:.3f}...".format(x[Npoints-1],y[i]))
+        beam_xy.move_absolute_trigger(x[Npoints-1],y[i])
+        print("Stop moving")
+        
+        # Ensure that VNA is ready to read memory
+        
+        if vna.ready(tmeas_act*1.1):
+            print("VNA ready")
+        else:
+            raise Exception("VNA sweep timeout")
+        
+        # Read data from VNA
+        
+        data_re[i*Npoints:(i+1)*Npoints]=vna.get_data('re')
+        data_im[i*Npoints:(i+1)*Npoints]=vna.get_data('im')
+        
+        #Data for plotting
+        
+        data_comp.real=data_re
+        data_comp.imag=data_im
+        
+        #data_mag=abs(data_comp)
+        #data_phase=np.angle(data_comp)
+        
+        # Buffering row data to save to disk
+        
+        save_buffer[:,0]=x
+        save_buffer[:,1]=np.ones(Npoints)*y[i]
+        save_buffer[:,2]=data_re
+        save_buffer[:,3]=data_im
             
         if not scan.meas_cut:
             with open(filepath+scan.get_filepath(),'ab') as f:
@@ -398,4 +473,16 @@ def main():
 
 if __name__ == "__main__":
     print('Entered main')
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        beam_xy.close_all()
+        vna.close()
+        lo_source.close()
+        rf_source.close()
+    except:
+        beam_xy.close_all()
+        vna.close()
+        lo_source.close()
+        rf_source.close()
+        raise
