@@ -40,7 +40,7 @@ class BeamScanner:
         self.type=type
         self.unit_conversion=0
         
-    def get_resp(self):
+    def get_resp(self): # listens OK from server
         ans="";
         while ans=="":
             ans=self.socket.recv(1024)
@@ -56,45 +56,47 @@ class BeamScanner:
         except:
             return
     
+    def query(self,cmd):
+        tosend='{}\n'.format(cmd)
+        self.socket.sendall(tosend)
+        #print(tosend)
+        return self.get_resp()
+    
     def connect(self):
         self.socket.connect((self.ip,9988))
         self.socket.sendall(self.type)
-        self.get_resp()          # get de OK from server
+        self.get_resp()
+        #self.query(self.type)
         self.unit_conversion=float(self.get_unit_conversion())
     
     def close_all(self):
-        self.socket.sendall('close_all \n')
+        self.socket.sendall('close_all\n')
     
     def get_unit_conversion(self):
-        self.socket.sendall('get_unit_converter \n')
-        return self.get_resp()
+        return self.query('get_unit_converter')
+
      
     def set_origin(self):
-        self.socket.sendall('set_origin \n')
-        self.get_resp()
+        return self.query('set_origin')
     
     def set_speed(self,speed,dir):
-        self.socket.sendall('set_speed {:.3f} {}\n'.format(speed,dir))
-        self.get_resp()
+        return self.query('set_speed {:.3f} {}'.format(speed,dir))
     
     def get_speed(self,dir):
-        self.socket.sendall('get_speed {}\n'.format(dir))
-        speed=float(self.get_resp())/self.unit_conversion;
+        speed=float(self.query('get_speed {}'.format(dir)))/self.unit_conversion;
         print('Speed is {:.3f} [mm/s]'.format(speed))
         return speed
         
     def query_moving(self):
-        self.socket.sendall('query_moving \n')
-        ans=int(self.get_resp())
+        ans=int(self.query('query_moving'))
         #print('query_moving: {}'.format(ans))
         return ans != 0
     
-    def move_relative(self,x,y):
-        self.socket.sendall('move_relative {:.3f} {:.3f}\n'.format(x,y))
-        self.get_resp()
+    #def move_relative(self,x,y):
+    #    self.query('move_relative {:.3f} {:.3f}'.format(x,y))
     
     def move_absolute(self,x,y):
-        self.socket.sendall('move_absolute {:.3f} {:.3f}\n'.format(x,y))
+        self.query('move_absolute {:.3f} {:.3f}'.format(x,y))
         #ans=" ";
         ans=self.query_moving()
         while ans:
@@ -106,11 +108,9 @@ class BeamScanner:
         #print('ok')
         
     def move_absolute_trigger(self,x,y):
-        self.socket.sendall('move_absolute_trigger {:.3f} {:.3f}\n'.format(x,y))
-        #ans=" ";
+        self.query('move_absolute_trigger {:.3f} {:.3f}'.format(x,y))
         ans=self.query_moving()
         while ans:
-            #ans=self.get_resp().strip()
             time.sleep(0.1)
             print("move_absolute_trigger(): moving")
             ans=self.query_moving()
@@ -210,8 +210,8 @@ class VNA(Visa_inst):
         #print("{:d}".format(max_count))
         count=0
         while True:
-            ans=float(self.query('STAT:OPER:DEV?'))
-            #print(ans)
+            ans=int(self.query('STAT:OPER:DEV?'))
+            # print('VNA ready: {:d}'.format(ans))
             if ans == 16:
                 return True
             if count > max_count:
@@ -404,7 +404,7 @@ def main():
         beam_xy.set_speed(scan.meas_spd)
         print("New speed: {:.3f}".format(beam_xy.get_speed('x')))
     
-    data_comp=np.zeros(Npoints,dtype=complex)
+    data_comp=np.zeros(Npoints**2,dtype=complex)
     data_re=np.zeros(Npoints**2)
     data_im=np.zeros(Npoints**2)
     data_mag=np.zeros(Npoints**2)
@@ -448,8 +448,8 @@ def main():
         
         #Data for plotting
         
-        data_comp.real=data_re
-        data_comp.imag=data_im
+        data_comp[i*Npoints:(i+1)*Npoints].real=data_re[i*Npoints:(i+1)*Npoints]
+        data_comp[i*Npoints:(i+1)*Npoints].imag=data_im[i*Npoints:(i+1)*Npoints]
         
         #data_mag=abs(data_comp)
         #data_phase=np.angle(data_comp)
@@ -458,8 +458,8 @@ def main():
         
         save_buffer[:,0]=x
         save_buffer[:,1]=np.ones(Npoints)*y[i]
-        save_buffer[:,2]=data_re
-        save_buffer[:,3]=data_im
+        save_buffer[:,2]=data_re[i*Npoints:(i+1)*Npoints]
+        save_buffer[:,3]=data_im[i*Npoints:(i+1)*Npoints]
             
         if not scan.meas_cut:
             with open(filepath+scan.get_filepath(),'ab') as f:
