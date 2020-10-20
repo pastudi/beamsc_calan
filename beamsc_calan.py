@@ -51,7 +51,7 @@ def main():
     scan.distance=50 #mm
     scan.avg_points=0
     scan.sampl_dist=0.48 #lambda
-    scan.plane_size=10 #70 mm
+    scan.plane_size=100 #70 mm
     scan.meas_cut=False
     scan.xcut=True
     filepath='/home/pablo/DATA/beamscanner/'
@@ -64,8 +64,8 @@ def main():
     scan.rf_power=3.0 #dBm
     scan.lo_power=11.37 #dBm
     
-    scan.meas_spd=1   #mm/s
-    scan.move_spd=5     #mm/s
+    scan.meas_spd=5   #mm/s
+    scan.move_spd=10    #mm/s
     
     scan.name=raw_input('Enter antenna name (no spaces or special characters): ') or 'test'
     scan.comment=raw_input('Enter comments: ')
@@ -101,28 +101,38 @@ def main():
     lo_source.query('FREQ:MULT 48; *OPC?')
     lo_source.query('FREQ {:.9f} GHz; *OPC?'.format(scan.meas_freq-scan.if_freq))
     
-    Npoints=scan.calc_Msize()
-    Nstep=Npoints-1
+    
         
-    tmeas_est=scan.calc_plane()/scan.meas_spd
+    tline_est=scan.calc_plane()/scan.meas_spd
     
     
-    print("Estimated time [s]: {:.3f}".format(tmeas_est))
+    print("Estimated time [s]: {:.3f}".format(tline_est))
     
     vna.set_meas(scan)
     
-    tmeas_act=float(vna.query('SENSE1:SWE:TIME?'))
+    t1=vna.get_swtime1pt()
     
-    print("Actual time [s]: {:.3f}".format(tmeas_act))
+    scan.sweep_points=vna.set_swpoints(tline_est,t1)
     
-    if tmeas_est>tmeas_act:  # Privilegiar medidas lentas
-        vna.write('SENSE1:SWE:TIME {:.3f}'.format(tmeas_est))
-        tmeas_act=float(vna.query('SENSE1:SWE:TIME?'))
-        print("New actual time [s]: {:.6f}".format(tmeas_act))
-    elif tmeas_est<tmeas_act:
-        scan.meas_spd=scan.calc_plane/tmeas_act
-        beam_xy.set_speed(scan.meas_spd)
-        print("New speed: {:.3f}".format(beam_xy.get_speed('x')))
+    beam_xy.launch_trigger(1,1)
+    
+    if vna.ready(10):
+        pass
+    
+    tline_act=vna.get_cycletime(beam_xy,scan)
+    
+    print('Actual time [s]: {:.3f}'.format(tline_act))
+    
+    print('Swe pts: {:d}'.format(scan.sweep_points))
+    
+    scan.sweep_points=int(scan.sweep_points*tline_est/tline_act)
+    
+    print('Swe pts: {:d}'.format(scan.sweep_points))
+    
+    vna.set_meas(scan)
+    
+    Npoints=scan.calc_Msize()
+    Nstep=Npoints-1
     
     data_comp=np.zeros(Npoints**2,dtype=complex)
     data_re=np.zeros(Npoints**2)
@@ -134,6 +144,11 @@ def main():
     
     x=np.arange(-Nstep/2,Nstep/2+1)*scan.calc_step()
     y=x
+    
+    Np_vna=scan.sweep_points;
+    Ns_vna=Np_vna-1
+    step_vna=scan.calc_plane()/(Np_vna-1)
+    x_vna=np.linspace(-0.5,0.5,Np_vna)*scan.calc_plane()
     
     # Measurement loop
     
@@ -157,20 +172,23 @@ def main():
         
         # Ensure that VNA is ready to read memory
         
-        if vna.ready(tmeas_act*1.1):
+        if vna.ready(tline_act*1.1):
             print("VNA ready")
         else:
             raise Exception("VNA sweep timeout")
         
         # Read data from VNA
         
-        data_re[i*Npoints:(i+1)*Npoints]=vna.get_data('re')
-        data_im[i*Npoints:(i+1)*Npoints]=vna.get_data('im')
+        vna_re=vna.get_data('re')
+        vna_im=vna.get_data('im')
+        
+        data_re[i*Npoints:(i+1)*Npoints]=np.interp(x,x_vna,vna_re)
+        data_im[i*Npoints:(i+1)*Npoints]=np.interp(x,x_vna,vna_im)
         
         #Data for plotting
         
-        data_comp[i*Npoints:(i+1)*Npoints].real=data_re[i*Npoints:(i+1)*Npoints]
-        data_comp[i*Npoints:(i+1)*Npoints].imag=data_im[i*Npoints:(i+1)*Npoints]
+        # data_comp[i*Npoints:(i+1)*Npoints].real=data_re[i*Npoints:(i+1)*Npoints]
+        # data_comp[i*Npoints:(i+1)*Npoints].imag=data_im[i*Npoints:(i+1)*Npoints]
         
         #data_mag=abs(data_comp)
         #data_phase=np.angle(data_comp)
@@ -204,7 +222,8 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         exit_clean()
-    except:
+    except Exception as e:
+        print(e.message)
         exit_clean()
         raise
     print('Measurement Done')

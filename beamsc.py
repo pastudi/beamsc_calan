@@ -67,7 +67,10 @@ class BeamScanner:
     #def move_relative(self,x,y):
     #    self.query('move_relative {:.3f} {:.3f}'.format(x,y))
     
-    def move_listener(self):
+    def launch_trigger(self,niter,width):
+        self.query('launch_trigger {:d} {:.3f}'.format(niter,width))
+    
+    def __move_listener(self):
         ans=self.query_moving()
         while ans:
             #ans=self.get_resp().strip()
@@ -77,11 +80,11 @@ class BeamScanner:
     
     def move_absolute(self,x,y):
         self.query('move_absolute {:.3f} {:.3f}'.format(x,y))
-        self.move_listener()
+        self.__move_listener()
         #print("move_absolute(): ok")
         #print('ok')
         
     def move_absolute_trigger(self,x,y):
         self.query('move_absolute_trigger {:.3f} {:.3f}'.format(x,y))
-        self.move_listener()
+        self.__move_listener()
         #print("move_absolute_trigger(): ok")

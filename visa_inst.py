@@ -25,8 +25,29 @@ class Visa_inst:
         return self.resource.query(str)
 
 class VNA(Visa_inst):
-    def __init__(self,ip,name='hpib7,16'):
+    def __init__(self,ip='192.168.1.30',name='hpib7,16'):
         self.addr="TCPIP0::"+ip+"::"+name+"::INSTR"
+        
+    def get_swtime1pt(self):   #Asuming previous call to set_meas()
+        self.query('SENS1:SWE:POIN 1; *OPC?')
+        return float(self.query('SENS1:SWE:TIME?'))
+    
+    def set_swpoints(self,t_line,t_sw1pt):
+        # t_line=BeamMeasurement.calc_plane()/BeamMeasurement.meas_spd
+        # t_swe1pt=self.get_swtime1pt()
+        Np= int(t_line/t_sw1pt)+1
+        self.query('SENS1:SWE:POIN {:d}; *OPC?'.format(Np))
+        return Np
+        
+    def get_cycletime(self,BeamScanner,BeamMeasurement):
+        # self.set_swpoints(BeamMeasurement)
+        self.write('*CLS')
+        start=time.time()   
+        BeamScanner.launch_trigger(1,1000)
+        if self.ready(60):
+            return time.time()-start
+        else:
+            print('get_cycletime: Timeout')
     
     #def set_meas(self,start,stop,bw,n_sweep,n_avg=0,isAsig=True):
     def set_meas(self,BeamMeasurement):
@@ -65,6 +86,7 @@ class VNA(Visa_inst):
         self.query('SENS1:FREQ:FIX {:.12f} MHz; *OPC?;'.format(start))
         self.query('SENSE1:SWEEP:POINTS {:.12f}; *OPC?; '.format(n_sweep))
         self.write('SENSE1:BWID {:.12f} Hz '.format(bw))
+        self.query('SENSE1:SWE:TIME MIN; *OPC?')
         
         if n_avg!=0:
             self.write('SENS:AVER ON')
