@@ -5,27 +5,12 @@
 from __future__ import print_function
 import pyvisa as visa
 import numpy as np
-# from datetime import datetime
-# from os import path,mkdir
-# import socket
 import time
-# from math import ceil
-# import pathlib2 as pathlib
+from sys import exit
 from visa_inst import Visa_inst, VNA
 from beamsc import BeamScanner
-from beammeas import BeamMeasurement
-
-# class VVM:
-    # def __init__(self,ip='192.169.1.10',bofname='vv_casper.bof',valon_freq=1080):
-        # self.ip=ip
-        # self.bofname=bofname
-        # self.valon_freq=valon_freq
-    
-    # def connect(self):
-        # self.resource=corr.katcp_wrapper.FpgaClient(self.ip)
-        # self.resource.listbof()
-    
-        
+from beammeas import BeamMeasurement        
+import traceback as tr
 
 IP_VNA=         '192.168.1.30'
 IP_RF_SOURCE=   '192.168.1.36'
@@ -46,7 +31,6 @@ def main():
     #file_tstamp=meas_start.strftime("%Y%m%d_%H%M%S")
     
     scan.meas_freq=296 #GHz
-    #scan.name='untitled';
     scan.antenna_aperture=35#mm
     scan.distance=50 #mm
     scan.avg_points=0
@@ -58,14 +42,14 @@ def main():
     logpath='./'
     
     scan.if_freq=.050  # GHz
-    scan.ifbw=40 # Hz
+    scan.ifbw=100    # Hz
     scan.sweep_points=scan.calc_Msize()
     scan.isAsig=True
     scan.rf_power=3.0 #dBm
     scan.lo_power=11.37 #dBm
     
     scan.meas_spd=5   #mm/s
-    scan.move_spd=10    #mm/s
+    scan.move_spd=20    #mm/s
     
     scan.name=raw_input('Enter antenna name (no spaces or special characters): ') or 'test'
     scan.comment=raw_input('Enter comments: ')
@@ -90,6 +74,7 @@ def main():
         beam_xy.connect()
         print('OK')
     except:
+        print('main: Error conecting')
         pass
     beam_xy.set_speed(scan.move_spd,'x')
     beam_xy.set_speed(scan.move_spd,'y')
@@ -143,12 +128,15 @@ def main():
     save_buffer=np.zeros((Npoints,4))
     
     x=np.arange(-Nstep/2,Nstep/2+1)*scan.calc_step()
+    x=np.flip(x)
     y=x
     
     Np_vna=scan.sweep_points;
     Ns_vna=Np_vna-1
     step_vna=scan.calc_plane()/(Np_vna-1)
     x_vna=np.linspace(-0.5,0.5,Np_vna)*scan.calc_plane()
+    
+    data_vna=np.zeros(Npoints*Np_vna,dtype=complex)
     
     # Measurement loop
     
@@ -166,22 +154,30 @@ def main():
         
         # Start moving + isntrument measurement
         
-        print("Moving to end:\t{:.3f}, {:.3f}...".format(x[Npoints-1],y[i]), end='\t')
+        print("Moving to end:\t\t{:.3f}, {:.3f}...".format(x[Npoints-1],y[i]), end='\t')
         beam_xy.move_absolute_trigger(x[Npoints-1],y[i])
         print("Stop")
         
         # Ensure that VNA is ready to read memory
-        
+                
         if vna.ready(tline_act*1.1):
             print("VNA ready")
         else:
+            print('main: VNA sweep timeout')
             raise Exception("VNA sweep timeout")
         
         # Read data from VNA
         
-        vna_re=vna.get_data('re')
-        vna_im=vna.get_data('im')
-        
+        try:
+            vna_re=vna.get_data('re')
+            vna_im=vna.get_data('im')
+        except visa.VisaIOError, e:
+            print('main(): {}'.format(e))
+            tr.print_exc()
+            pass
+
+        data_vna[i*Np_vna:(i+1)*Np_vna].real=vna_re
+        data_vna[i*Np_vna:(i+1)*Np_vna].imag=vna_im
         data_re[i*Npoints:(i+1)*Npoints]=np.interp(x,x_vna,vna_re)
         data_im[i*Npoints:(i+1)*Npoints]=np.interp(x,x_vna,vna_im)
         
@@ -199,11 +195,21 @@ def main():
         save_buffer[:,1]=np.ones(Npoints)*y[i]
         save_buffer[:,2]=data_re[i*Npoints:(i+1)*Npoints]
         save_buffer[:,3]=data_im[i*Npoints:(i+1)*Npoints]
-            
-        if not scan.meas_cut:
-            with open(filepath+scan.get_filepath(),'ab') as f:
-                np.savetxt(f,save_buffer)
-            save_buffer=np.zeros((Npoints,4))
+        
+        try:
+            if not scan.meas_cut:
+                with open(filepath+scan.get_filepath(),'ab') as f:
+                    np.savetxt(f,save_buffer)
+                save_buffer=np.zeros((Npoints,4))
+        except Exception as e:
+            print('main(): {}'.format(e))
+            tr.print_exc()
+    try:        
+        with open(filepath+scan.get_filepath()+'_raw','ab') as f:
+            np.savetxt(f,data_vna.real,data_vna.imag)
+    except Exception as e:
+        print('main(): {}'.format(e))
+        tr.print_exc()
 
 def exit_clean():
     try:
@@ -211,20 +217,30 @@ def exit_clean():
         vna.close()
         lo_source.close()
         rf_source.close()
-    except VI_ERROR_TMO:
-        print('Timeout while closing')
+    except visa.VisaIOError as e:
+        print('exit_clean(): {}'.format(e))
+        tr.print_exc()
         pass
-    exit(0)
+    except IOError as e:
+        print('exit_clean(): {}'.format(e))
+        tr.print_exc()
+    except Exception as e:
+        print('exit_clean(): {}'.format(e))
+        tr.print_exc()
+    finally:
+        exit()
 
 if __name__ == "__main__":
     print('Entered main')
     try:
         main()
     except KeyboardInterrupt:
+        print('KeyboardInterrupt')
         exit_clean()
     except Exception as e:
-        print(e.message)
+        print('General error: {}'.format(e))
+        tr.print_exc()
         exit_clean()
-        raise
+        raise e
     print('Measurement Done')
     exit_clean()

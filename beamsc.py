@@ -14,9 +14,12 @@ class BeamScanner:
         
     def get_resp(self): # listens OK from server
         ans=""
-        while ans=="":
-            ans=self.socket.recv(1024)
-            time.sleep(0.1)
+        try:
+            while ans=="":
+                ans=self.socket.recv(1024)
+                time.sleep(0.1)
+        except Exception as e:
+            raise Exception('BeamScanner communication error')
         ans=ans.rstrip()
         #print('get_resp(): {}'.format(ans))
         return ans
@@ -61,7 +64,7 @@ class BeamScanner:
         
     def query_moving(self):
         ans=int(self.query('query_moving'))
-        #print('query_moving: {}'.format(ans))
+        # print('query_moving: {}'.format(ans))
         return ans != 0
     
     #def move_relative(self,x,y):
@@ -75,16 +78,16 @@ class BeamScanner:
         while ans:
             #ans=self.get_resp().strip()
             time.sleep(0.1)
-            #print("move_absolute(): moving")
+            # print("move_absolute(): moving")
             ans=self.query_moving()
     
     def move_absolute(self,x,y):
         self.query('move_absolute {:.3f} {:.3f}'.format(x,y))
         self.__move_listener()
-        #print("move_absolute(): ok")
+        # print("move_absolute(): ok")
         #print('ok')
         
     def move_absolute_trigger(self,x,y):
         self.query('move_absolute_trigger {:.3f} {:.3f}'.format(x,y))
         self.__move_listener()
-        #print("move_absolute_trigger(): ok")
+        # print("move_absolute_trigger(): ok")
