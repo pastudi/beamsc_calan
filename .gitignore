@@ -1,0 +1,5 @@
+*.pyc
+*.py.*
+untitled/
+*.log
+beamsc_vvm.py
