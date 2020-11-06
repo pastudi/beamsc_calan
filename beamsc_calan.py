@@ -26,9 +26,7 @@ scan=BeamMeasurement()
 
 def main():
     
-      # Measurement parameters
-    #meas_start=datetime.now()
-    #file_tstamp=meas_start.strftime("%Y%m%d_%H%M%S")
+    # Measurement parameters
     
     scan.meas_freq=296 #GHz
     scan.antenna_aperture=35#mm
@@ -42,7 +40,7 @@ def main():
     logpath='./'
     
     scan.if_freq=.050  # GHz
-    scan.ifbw=100    # Hz
+    scan.ifbw=50    # Hz
     scan.sweep_points=scan.calc_Msize()
     scan.isAsig=True
     scan.rf_power=3.0 #dBm
@@ -206,17 +204,19 @@ def main():
             tr.print_exc()
     try:        
         with open(filepath+scan.get_filepath()+'_raw','ab') as f:
-            np.savetxt(f,data_vna.real,data_vna.imag)
+            np.savetxt(f,data_vna.view(float))
     except Exception as e:
         print('main(): {}'.format(e))
         tr.print_exc()
+    
+    beam_xy.set_speed(scan.move_spd,'x')
 
 def exit_clean():
     try:
         beam_xy.close_all()
         vna.close()
         lo_source.close()
-        rf_source.close()
+        # rf_source.close()
     except visa.VisaIOError as e:
         print('exit_clean(): {}'.format(e))
         tr.print_exc()
@@ -224,11 +224,14 @@ def exit_clean():
     except IOError as e:
         print('exit_clean(): {}'.format(e))
         tr.print_exc()
+        pass
     except Exception as e:
         print('exit_clean(): {}'.format(e))
         tr.print_exc()
+        pass
     finally:
-        exit()
+        print('Program Exit')
+        exit(0)
 
 if __name__ == "__main__":
     print('Entered main')
