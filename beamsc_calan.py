@@ -87,31 +87,20 @@ def main():
     
         
     tline_est=scan.calc_plane()/scan.meas_spd
-    
-    
     print("Estimated time [s]: {:.3f}".format(tline_est))
-    
     vna.set_meas(scan)
-    
     t1=vna.get_swtime1pt()
-    
     scan.sweep_points=vna.set_swpoints(tline_est,t1)
-    
     beam_xy.launch_trigger(1,1)
     
     if vna.ready(10):
         pass
     
     tline_act=vna.get_cycletime(beam_xy,scan)
-    
     print('Actual time [s]: {:.3f}'.format(tline_act))
-    
     print('Swe pts: {:d}'.format(scan.sweep_points))
-    
     scan.sweep_points=int(scan.sweep_points*tline_est/tline_act)
-    
     print('Swe pts: {:d}'.format(scan.sweep_points))
-    
     vna.set_meas(scan)
     
     Npoints=scan.calc_Msize()
@@ -133,6 +122,7 @@ def main():
     Ns_vna=Np_vna-1
     step_vna=scan.calc_plane()/(Np_vna-1)
     x_vna=np.linspace(-0.5,0.5,Np_vna)*scan.calc_plane()
+    x_vna=np.flip(x_vna)
     
     data_vna=np.zeros(Npoints*Np_vna,dtype=complex)
     
@@ -152,7 +142,7 @@ def main():
         
         # Start moving + isntrument measurement
         
-        print("Moving to end:\t\t{:.3f}, {:.3f}...".format(x[Npoints-1],y[i]), end='\t')
+        print("Moving to end:\t\t{:.3f}, {:.3f}...".format(x[-1],y[i]), end='\t')
         beam_xy.move_absolute_trigger(x[Npoints-1],y[i])
         print("Stop")
         

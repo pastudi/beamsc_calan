@@ -49,8 +49,8 @@ class VNA(Visa_inst):
         else:
             print('get_cycletime: Timeout')
     
-    #def set_meas(self,start,stop,bw,n_sweep,n_avg=0,isAsig=True):
     def set_meas(self,BeamMeasurement):
+        # Too lazy to change the variable names
         precision=12;
         n_sweep=BeamMeasurement.sweep_points
         start=BeamMeasurement.if_freq*1000

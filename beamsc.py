@@ -3,6 +3,7 @@
 from __future__ import print_function
 import socket
 import time
+import traceback as tr
 
 class BeamScanner:
     def __init__(self,ip='192.168.1.62',type='move x,y'):
@@ -19,6 +20,7 @@ class BeamScanner:
                 ans=self.socket.recv(1024)
                 time.sleep(0.1)
         except Exception as e:
+            tr.print_exc()
             raise Exception('BeamScanner communication error')
         ans=ans.rstrip()
         #print('get_resp(): {}'.format(ans))

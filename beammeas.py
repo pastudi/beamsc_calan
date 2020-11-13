@@ -5,6 +5,7 @@ from datetime import datetime
 from os import path,mkdir
 import pathlib2 as pathlib
 from math import ceil
+import numpy as np
 
 class BeamMeasurement:
     def __init__(self):
@@ -22,7 +23,7 @@ class BeamMeasurement:
         #VNA
         self.if_freq=0.0
         self.ifbw=0.0
-        self.sweep_points=0.0
+        self.sweep_points=0
         self.isAsig=True
         self.avg_points=0
         #RF Source
@@ -48,6 +49,13 @@ class BeamMeasurement:
         
     def calc_plane(self):
         return (self.calc_Msize()-1)*self.calc_step()
+    
+    def space_array(self):
+        Npoints=self.calc_Msize()
+        Nstep=Npoints-1
+        x=np.arange(-Nstep/2,Nstep/2+1)*self.calc_step()
+        
+        return np.flip(x)
         
     def get_filepath(self):
         return self.name+'/'+self.meas_start.strftime("%Y%m%d_%H%M%S")
@@ -71,7 +79,7 @@ class BeamMeasurement:
             f.write('# Sampling distance (lambda): {:.2f}\n'.format(self.sampl_dist))
             #Configuracion instrumentos
             f.write('# IF Freq (GHz): {:.2f}\n'.format(self.if_freq))
-            f.write('# IF BW (Hz): {:d}\n'.format(self.ifbw))
+            f.write('# IF BW (Hz): {:.2f}\n'.format(self.ifbw))
             f.write('# Sweep Points: {:d}\n'.format(self.sweep_points))
             f.write('# Signal channel A?: {:d}\n'.format(self.isAsig))
             f.write('# RF Power (dBm): {:.2f}\n'.format(self.rf_power))
@@ -102,7 +110,7 @@ class BeamMeasurement:
         i+=1
         self.ifbw            =float(param[i])
         i+=1
-        self.sweep_points    =float(param[i])
+        self.sweep_points    =int(param[i])
         i+=1
         self.isAsig          =int(param[i])
         i+=1
