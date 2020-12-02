@@ -70,7 +70,7 @@ class VNA2(VNA):
         
 parampath='/home/pablo/DATA/beamscanner/ccat_spline_horn1/20201103_170228'
 filepath='/home/pablo/DATA/beamscanner/sys_eval/'
-vna=VNA2(IP_VNA)
+vna=VNA(IP_VNA)
 beam_xy=BeamScanner(IP_BEAM_XY,'move x,y')
 scan=BeamMeasurement()
 tline=0.0
