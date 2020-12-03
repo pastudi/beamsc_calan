@@ -5,14 +5,13 @@ import socket
 import time
 import traceback as tr
 
-class BeamScanner:
+class BeamClient:
     def __init__(self,ip='192.168.1.62',type='move x,y'):
         self.socket=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.settimeout(5)
         self.ip=ip
         self.type=type
-        self.unit_conversion=0
-        
+    
     def get_resp(self): # listens OK from server
         ans=""
         try:
@@ -43,18 +42,28 @@ class BeamScanner:
         self.socket.connect((self.ip,9988))
         self.socket.sendall(self.type)
         self.get_resp()
-        #self.query(self.type)
-        self.unit_conversion=float(self.get_unit_conversion())
+    
+    def set_origin(self):
+        return self.query('set_origin')
     
     def close_all(self):
         self.socket.sendall('close_all\n')
-    
+
+class BeamScanner(BeamClient,object):
+    def __init__(self,ip='192.168.1.62'):
+        super(BeamScanner,self).__init__(ip,'move x,y')
+        self.unit_conversion=0
+        
+    def connect(self):
+        # self.socket.connect((self.ip,9988))
+        # self.socket.sendall(self.type)
+        # self.get_resp()
+        #self.query(self.type)
+        super(BeamScanner,self).connect()
+        self.unit_conversion=float(self.get_unit_conversion())
+
     def get_unit_conversion(self):
         return self.query('get_unit_converter')
-
-     
-    def set_origin(self):
-        return self.query('set_origin')
     
     def set_speed(self,speed,dir):
         return self.query('set_speed {:.3f} {}'.format(speed,dir))
@@ -93,3 +102,13 @@ class BeamScanner:
         self.query('move_absolute_trigger {:.3f} {:.3f}'.format(x,y))
         self.__move_listener()
         # print("move_absolute_trigger(): ok")
+        
+class BeamAng(BeamClient,object):
+    def __init__(self,ip='192.168.1.62'):
+        super(BeamAng,self).__init__(ip,'move ang')
+    
+    def ask_position(self)
+        return self.query('ask_position')
+    
+    def move_absolute(self,x):
+        self.query('move_absolute {:.3f}'.format(x))

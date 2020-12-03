@@ -15,13 +15,14 @@ import traceback as tr
 IP_VNA=         '192.168.1.30'
 IP_RF_SOURCE=   '192.168.1.36'
 IP_BEAM_XY=     '192.168.1.62'
-IP_BEAM_ANGLE=  '192.168.1.62'
+IP_BEAM_ANG=  '192.168.1.62'
 IP_LO_SOURCE=   '192.168.1.31'     # Agilent
 
 vna=VNA(IP_VNA)
 rf_source=Visa_inst(IP_RF_SOURCE)
 lo_source=Visa_inst(IP_LO_SOURCE)
-beam_xy=BeamScanner(IP_BEAM_XY,'move x,y')
+beam_xy=BeamScanner(IP_BEAM_XY)
+beam_ang=BeamScanner(IP_BEAM_ANG)
 scan=BeamMeasurement()
 
 def main():
@@ -106,11 +107,11 @@ def main():
     Npoints=scan.calc_Msize()
     Nstep=Npoints-1
     
-    data_comp=np.zeros(Npoints**2,dtype=complex)
+    # data_comp=np.zeros(Npoints**2,dtype=complex)
     data_re=np.zeros(Npoints**2)
     data_im=np.zeros(Npoints**2)
-    data_mag=np.zeros(Npoints**2)
-    data_phase=np.zeros(Npoints**2)
+    # data_mag=np.zeros(Npoints**2)
+    # data_phase=np.zeros(Npoints**2)
     
     save_buffer=np.zeros((Npoints,4))
     
