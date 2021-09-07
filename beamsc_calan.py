@@ -9,13 +9,13 @@ import time
 from sys import exit
 from visa_inst import Visa_inst, VNA
 from beamsc import BeamScanner
-from beammeas import BeamMeasurement        
+from beammeas import BeamMap        
 import traceback as tr
 
 IP_VNA=         '192.168.1.30'
 IP_RF_SOURCE=   '192.168.1.36'
 IP_BEAM_XY=     '192.168.1.62'
-IP_BEAM_ANG=  '192.168.1.62'
+IP_BEAM_ANG=    '192.168.1.62'
 IP_LO_SOURCE=   '192.168.1.31'     # Agilent
 
 vna=VNA(IP_VNA)
@@ -23,7 +23,7 @@ rf_source=Visa_inst(IP_RF_SOURCE)
 lo_source=Visa_inst(IP_LO_SOURCE)
 beam_xy=BeamScanner(IP_BEAM_XY)
 beam_ang=BeamScanner(IP_BEAM_ANG)
-scan=BeamMeasurement()
+scan=BeamMap()
 
 def main():
     
@@ -85,7 +85,8 @@ def main():
     lo_source.query('FREQ:MULT 48; *OPC?')
     lo_source.query('FREQ {:.9f} GHz; *OPC?'.format(scan.meas_freq-scan.if_freq))
     
-    
+    scan.rf_power=rf_source.get_power()
+    scan.lo_power=lo_source.get_power()
         
     tline_est=scan.calc_plane()/scan.meas_spd
     print("Estimated time [s]: {:.3f}".format(tline_est))

@@ -8,8 +8,6 @@ import numpy as np
 import time
 from sys import exit
 from visa_inst import Visa_inst, VNA
-from beamsc import BeamScanner
-from beammeas import BeamMap        
 import traceback as tr
 from datetime import datetime
 
@@ -18,7 +16,7 @@ savepath='/home/pablo/DATA/end2end/'
 IP_VNA=         '192.168.1.30'
 
 vna=VNA(IP_VNA)
-n_sweep=2001
+n_sweep=20001
 
 def set_meas(VNA):
     global n_sweep

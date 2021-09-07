@@ -8,20 +8,25 @@ from datetime import datetime
 from sys import exit
 from visa_inst import Visa_inst, VNA
 from beamsc import BeamScanner
-from beammeas import BeamMeasurement        
+from beammeas import BeamTest       
 import traceback as tr
 from beamsc_calan import IP_VNA,IP_BEAM_XY,exit_clean
+import matplotlib
+matplotlib.use('TkAgg')
+from matplotlib import pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from Tkinter import *
 
 class VNA2(VNA):
-    def set_meas(self,BeamMeasurement):
+    def set_meas(self,BeamMap):
         # Too lazy to change the variable names
         precision=12;
-        n_sweep=BeamMeasurement.sweep_points
-        start=BeamMeasurement.if_freq*1000
+        n_sweep=BeamMap.sweep_points
+        start=BeamMap.if_freq*1000
         stop=start
-        bw=BeamMeasurement.ifbw
-        n_avg=BeamMeasurement.avg_points
-        isAsig=BeamMeasurement.isAsig
+        bw=BeamMap.ifbw
+        n_avg=1 #BeamMap.avg_points
+        isAsig=BeamMap.isAsig
         
         self.write('SYST:FPReset')
         self.write('DISPlay:WINDow1:STATE ON')
@@ -71,13 +76,33 @@ class VNA2(VNA):
 parampath='/home/pablo/DATA/beamscanner/ccat_spline_horn1/20201103_170228'
 filepath='/home/pablo/DATA/beamscanner/sys_eval/'
 vna=VNA(IP_VNA)
-beam_xy=BeamScanner(IP_BEAM_XY,'move x,y')
-scan=BeamMeasurement()
+beam_xy=BeamScanner(IP_BEAM_XY)
+scan=BeamTest()
 tline=0.0
 
 beam_xy.connect()
 vna.connect()
-scan.load(parampath)
+scan.load('20201113_132419')
+
+def max_index(a):
+    return np.unravel_index(np.argmax(abs(a)),a.shape)
+
+def norm(a,rel_max=0.0):
+    if not rel_max:
+        max_=a[max_index(a)]
+    else:
+        max_=rel_max
+    return a/max_
+
+def db(a):
+    return 20*np.log10(abs(a))
+
+def deg(a,unwrap=False):
+    out=np.angle(a)
+    if unwrap:
+        out=np.unwrap(out)
+        out-=np.amax(out)
+    return np.rad2deg(out)
 
 def conf_vna():
 
@@ -103,6 +128,70 @@ def conf_vna():
     vna.set_meas(scan)
     
     return tline_act
+    
+def plot_test(BeamTest,title,db_=True):
+    fig=plt.figure(figsize=(10.51,4.52))
+    plt.suptitle(title)
+    fig.subplots_adjust(bottom=0.1, right=0.98, top=0.9,left=.07,wspace=0.17)
+    ax=fig.add_subplot(1,2,1)
+    ax1=fig.add_subplot(1,2,2)
+    ax.set_xlabel('Distance (mm)')
+    ax.set_ylabel('Magnitude')
+    # ax1.set_ylabel('Phase [deg]')
+    
+    ax.grid( color='0.95')
+    ax1.grid( color='0.95')
+    
+    X,DATA=BeamTest.read_data()
+    
+    for i in range(BeamTest.nlines):
+        if db_:
+            ax.plot(X[i,:],db(DATA[i,:]))
+        else:
+            ax.plot(X[i,:],abs(DATA[i,:]))
+        # ax1.plot(X[i,:],deg(DATA[i,:],True))
+    
+    if BeamTest.test_type is 'L':
+        offset=get_lin_offset(DATA)
+        for i in range(BeamTest.nlines-1):
+            # ax1.plot(X[i,:],offset[i,:])
+            ax1.plot(db(DATA[0,:]),db(DATA[i+1,:]),'+')
+            ax1.plot([0, 1], [0, 1], transform=ax1.transAxes,ls='--',c='black')
+            # l,r=xlim()
+            # t,b=ylim()
+            plt.xlim(-120,-30)
+            plt.ylim(-120,-30)
+            ax1.set_xlabel('Reference Power [dB]')
+            ax1.set_ylabel('Power (dB)')
+            ax1.set_aspect('equal', adjustable='box')
+            
+            # ax.plot([0, 1], [0, 1], transform=ax.transAxes)
+    elif BeamTest.test_type is 'R':
+        tline,y=get_rep_evol(BeamTest,DATA)
+        ax1.plot(tline,y)
+        ax1.set_xlabel('Time [seg]')
+        ax1.set_ylabel('Magnitude')
+    
+    fig.show()
+    return fig
+
+def get_lin_offset(data):
+    off=np.zeros((data.shape[0]-1,data.shape[1]))
+    for i in range(data.shape[0]-1):
+        off[i,:]=db(data[i,:])-db(data[i+1,:])
+    return off
+
+def get_rep_evol(BeamTest,data):
+    tline=BeamTest.calc_plane()*(1/BeamTest.meas_spd+1/BeamTest.move_spd)+BeamTest.delay
+    t=np.arange(BeamTest.nlines)*tline
+    n=(BeamTest.calc_Msize()-1)/2+1
+    y=abs(data[:,n])
+    return t,y
+    
+# def get_lin_curve(data):
+    # d_db=db(data):
+    
+    
 
 def stability_measurement(N=10,delay=0.0,wait_user=False):
 
@@ -131,23 +220,25 @@ def stability_measurement(N=10,delay=0.0,wait_user=False):
     scan.name=raw_input('Enter antenna name (no spaces or special characters): ') or 'test'
     scan.comment=raw_input('Enter comments: ')
     
-    with open(filename,'a') as f:
-        f.write('# Antenna Name: {}\n'.format(scan.name))
-        f.write('# Frequency (GHz): {:.2f}\n'.format(scan.meas_freq))
-        f.write('# Comment: {}\n'.format(scan.comment))
-        f.write('# Plane size (mm): {:.2f}\n'.format(scan.plane_size))
-        f.write('# Sampling distance (lambda): {:.2f}\n'.format(scan.sampl_dist))
-        #Configuracion instrumentos
-        f.write('# IF Freq (GHz): {:.2f}\n'.format(scan.if_freq))
-        f.write('# IF BW (Hz): {:.2f}\n'.format(scan.ifbw))
-        f.write('# Sweep Points: {:d}\n'.format(scan.sweep_points))
-        f.write('# Signal channel A?: {:d}\n'.format(scan.isAsig))
-        f.write('# Measurement Speed: {:.3f}\n'.format(scan.meas_spd))
-        f.write('# Movement Speed: {:.3f}\n'.format(scan.move_spd))
-        f.write('# Number of lines: {:d}\n'.format(N))
-        f.write('# Delay between lines {:.2f}\n'.format(delay))
-        f.write('# Wait for user: {:d}\n'.format(wait_user))
-        f.write('# x [mm] RE[] IM[]\n')
+    scan.savetxt()
+    
+    # with open(filename,'a') as f:
+        # f.write('# Antenna Name: {}\n'.format(scan.name))
+        # f.write('# Frequency (GHz): {:.2f}\n'.format(scan.meas_freq))
+        # f.write('# Comment: {}\n'.format(scan.comment))
+        # f.write('# Plane size (mm): {:.2f}\n'.format(scan.plane_size))
+        # f.write('# Sampling distance (lambda): {:.2f}\n'.format(scan.sampl_dist))
+        # Configuracion instrumentos
+        # f.write('# IF Freq (GHz): {:.2f}\n'.format(scan.if_freq))
+        # f.write('# IF BW (Hz): {:.2f}\n'.format(scan.ifbw))
+        # f.write('# Sweep Points: {:d}\n'.format(scan.sweep_points))
+        # f.write('# Signal channel A?: {:d}\n'.format(scan.isAsig))
+        # f.write('# Measurement Speed: {:.3f}\n'.format(scan.meas_spd))
+        # f.write('# Movement Speed: {:.3f}\n'.format(scan.move_spd))
+        # f.write('# Number of lines: {:d}\n'.format(N))
+        # f.write('# Delay between lines {:.2f}\n'.format(delay))
+        # f.write('# Wait for user: {:d}\n'.format(wait_user))
+        # f.write('# x [mm] RE[] IM[]\n')
     
     for i in range(N):
         

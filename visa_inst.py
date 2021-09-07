@@ -23,6 +23,9 @@ class Visa_inst:
         
     def query(self,str):
         return self.resource.query(str)
+    
+    def get_power(self):
+        return float(self.query('POW?'))
 
 class VNA(Visa_inst):
     def __init__(self,ip='192.168.1.30',name='hpib7,16'):
@@ -33,14 +36,14 @@ class VNA(Visa_inst):
         return float(self.query('SENS1:SWE:TIME?'))
     
     def set_swpoints(self,t_line,t_sw1pt):
-        # t_line=BeamMeasurement.calc_plane()/BeamMeasurement.meas_spd
+        # t_line=BeamMap.calc_plane()/BeamMap.meas_spd
         # t_swe1pt=self.get_swtime1pt()
         Np= int(t_line/t_sw1pt)+1
         self.query('SENS1:SWE:POIN {:d}; *OPC?'.format(Np))
         return Np
         
-    def get_cycletime(self,BeamScanner,BeamMeasurement):
-        # self.set_swpoints(BeamMeasurement)
+    def get_cycletime(self,BeamScanner,BeamMap):
+        # self.set_swpoints(BeamMap)
         self.write('*CLS')
         start=time.time()   
         BeamScanner.launch_trigger(1,1000)
@@ -49,15 +52,15 @@ class VNA(Visa_inst):
         else:
             print('get_cycletime: Timeout')
     
-    def set_meas(self,BeamMeasurement):
+    def set_meas(self,BeamMap):
         # Too lazy to change the variable names
         precision=12;
-        n_sweep=BeamMeasurement.sweep_points
-        start=BeamMeasurement.if_freq*1000
+        n_sweep=BeamMap.sweep_points
+        start=BeamMap.if_freq*1000
         stop=start
-        bw=BeamMeasurement.ifbw
-        n_avg=BeamMeasurement.avg_points
-        isAsig=BeamMeasurement.isAsig
+        bw=BeamMap.ifbw
+        n_avg=BeamMap.avg_points
+        isAsig=BeamMap.isAsig
         
         self.write('SYST:FPReset')
         self.write('DISPlay:WINDow1:STATE ON')
@@ -105,7 +108,8 @@ class VNA(Visa_inst):
         self.write('*CLS')
     
     def trigger(self):
-        self.query(':INITIATE:IMMEDIATE; *OPC?')
+        # self.query(':INITIATE:IMMEDIATE; *OPC?')
+        self.write(':INITIATE:IMMEDIATE')
     
     def get_data(self,type):
         #self.write('SENS:AVER:CLE')
@@ -116,9 +120,9 @@ class VNA(Visa_inst):
         #self.write('*WAI')
         
         fmt_cmd='CALCULATE1:FORMAT ';
-        if type=='re':
+        if 're' in type:
             fmt_cmd+='REAL'
-        elif type=='im':
+        elif 'im' in type:
             fmt_cmd+='IMAG'
         else:
             print('Data type {} not valid'.format(type))
@@ -128,9 +132,11 @@ class VNA(Visa_inst):
         
         self.write(fmt_cmd)
         self.write('FORMAT ASCII')
+        # self.write('FORMAT REAL,64')
         
         self.write('CALCULATE1:DATA? FDATA')
         DATA=self.resource.read_ascii_values(separator=',')
+        # DATA=self.resource.read_binary_values(datatype='d')
         
         return DATA 
         

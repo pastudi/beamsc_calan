@@ -5,7 +5,7 @@ import socket
 import time
 import traceback as tr
 
-class BeamClient:
+class BeamClient(object):
     def __init__(self,ip='192.168.1.62',type='move x,y'):
         self.socket=socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.settimeout(5)
@@ -47,7 +47,7 @@ class BeamClient:
         return self.query('set_origin')
     
     def close_all(self):
-        self.socket.sendall('close_all\n')
+        self.socket.sendall('close_all')
 
 class BeamScanner(BeamClient,object):
     def __init__(self,ip='192.168.1.62'):
@@ -107,7 +107,7 @@ class BeamAng(BeamClient,object):
     def __init__(self,ip='192.168.1.62'):
         super(BeamAng,self).__init__(ip,'move ang')
     
-    def ask_position(self)
+    def ask_position(self):
         return self.query('ask_position')
     
     def move_absolute(self,x):
